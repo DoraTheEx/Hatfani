@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include<unistd.h>
 
 #define MAX_IP_LENGTH 15  // Assuming IPv4 addresses
 #define MAX_INPUTS 100
@@ -16,6 +17,7 @@ typedef struct ThreadData {
     Node** root;
     char ip[MAX_IP_LENGTH + 1];
     char parentIp[MAX_IP_LENGTH + 1];
+    pthread_mutex_t* mutex;
 } ThreadData;
 
 Node* createNode(const char* ip) {
@@ -58,7 +60,9 @@ void insertNode(Node** root, const char* ip, const char* parentIp) {
 
 void* processInput(void* arg) {
     ThreadData* data = (ThreadData*)arg;
+    pthread_mutex_lock(data->mutex);
     insertNode(data->root, data->ip, data->parentIp);
+    pthread_mutex_unlock(data->mutex);
     return NULL;
 }
 
@@ -91,23 +95,35 @@ int main() {
     // Adding Patient Zero
     insertNode(&root, "1.1.1.1", "");  // No parent for patient zero
 
-    printf("Enter up to 100 IPs and their infectors (Ctrl+D to finish):\n");
+    printf("Enter up to 100 IPs and their infectors (Type QUIT to finish):\n");
 
     pthread_t threads[MAX_INPUTS];
     ThreadData threadData[MAX_INPUTS];
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
     int inputCount = 0;
+    int done = 0;
 
     // Read inputs
-    while (inputCount < MAX_INPUTS && scanf("%s %s", ip, parentIp) != EOF) {
-        threadData[inputCount].root = &root;
-        strncpy(threadData[inputCount].ip, ip, MAX_IP_LENGTH);
-        threadData[inputCount].ip[MAX_IP_LENGTH] = '\0';
-        strncpy(threadData[inputCount].parentIp, parentIp, MAX_IP_LENGTH);
-        threadData[inputCount].parentIp[MAX_IP_LENGTH] = '\0';
+    while (inputCount < MAX_INPUTS && !done) {
+        if (scanf("%s", ip) != EOF) {
+            if (strcmp(ip, "QUIT") == 0) {
+                done = 1;
+            } else {
+                scanf("%s", parentIp);
+                threadData[inputCount].root = &root;
+                strncpy(threadData[inputCount].ip, ip, MAX_IP_LENGTH);
+                threadData[inputCount].ip[MAX_IP_LENGTH] = '\0';
+                strncpy(threadData[inputCount].parentIp, parentIp, MAX_IP_LENGTH);
+                threadData[inputCount].parentIp[MAX_IP_LENGTH] = '\0';
+                threadData[inputCount].mutex = &mutex;
 
-        pthread_create(&threads[inputCount], NULL, processInput, &threadData[inputCount]);
-        inputCount++;
+                pthread_create(&threads[inputCount], NULL, processInput, &threadData[inputCount]);
+                inputCount++;
+            }
+        } else {
+            done = 1;
+        }
     }
 
     // Wait for all threads to finish
@@ -117,6 +133,7 @@ int main() {
 
     printf("\nInfection Tree:\n");
     printTree(root, 0);
+    sleep(10);
 
     return 0;
 }
