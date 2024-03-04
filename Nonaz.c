@@ -7,6 +7,7 @@
 
 struct Node {
     char ip[16];
+    struct Node* parent;
     struct Node* children[MAX_CONNECTIONS];
     int childCount;
 };
@@ -68,6 +69,7 @@ int main() {
 
     struct Node root;
     strcpy(root.ip, "Root");
+    root.parent = NULL;
     root.childCount = 0;
 
     while (1) {
@@ -81,16 +83,29 @@ int main() {
         }
 
         // Handle connection (replace with your logic)
-        char buffer[16];
-        recv(clientSocket, buffer, sizeof(buffer), 0);
+        char senderIP[16], parentIP[16];
+        recv(clientSocket, senderIP, sizeof(senderIP), 0);
+        recv(clientSocket, parentIP, sizeof(parentIP), 0);
 
         // Create a new child node
         struct Node* child = (struct Node*)malloc(sizeof(struct Node));
-        strcpy(child->ip, buffer);
+        strcpy(child->ip, senderIP);
+        child->parent = NULL;
         child->childCount = 0;
 
-        // Add the child to the root node
-        root.children[root.childCount++] = child;
+        // Find the parent node and add the child
+        for (int i = 0; i < root.childCount; i++) {
+            if (strcmp(root.children[i]->ip, parentIP) == 0) {
+                child->parent = root.children[i];
+                root.children[i]->children[root.children[i]->childCount++] = child;
+            }
+        }
+
+        // If parent not found, add to root (assumes the parent connects first)
+        if (child->parent == NULL) {
+            child->parent = &root;
+            root.children[root.childCount++] = child;
+        }
 
         // Print the tree
         printTree(&root, 0);
