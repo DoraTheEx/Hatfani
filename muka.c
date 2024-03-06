@@ -22,7 +22,7 @@ void printTree(struct Node* node, int level) {
     printf("%s\n", node->ip);
 
     for (int i = 0; i < node->childCount; i++)
-        printTree(node->children[i], level);
+        printTree(node->children[i], level + 1);
 }
 
 int main() {
