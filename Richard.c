@@ -3,130 +3,135 @@
 #include <string.h>
 #include <winsock2.h>
 
-#define MAX_CONNECTIONS 100
+#define MAX_USERS 100
 
-typedef struct Node {
+struct Node {
     char ip[16];
-    struct Node* next;
-} Node;
+    struct Node* sons[MAX_USERS];
+    int numSons;
+};
 
-typedef struct Tree {
-    char ip[16];
-    Node* infections;
-    struct Tree* children[MAX_CONNECTIONS];
-    int num_children;
-} Tree;
+struct Node* createNode(const char* ip) {
+    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
+    strcpy(newNode->ip, ip);
+    newNode->numSons = 0;
+    return newNode;
+}
 
-void addInfection(Tree* root, const char* infector, const char* infected) {
-    Node* newNode = (Node*)malloc(sizeof(Node));
-    strncpy(newNode->ip, infected, sizeof(newNode->ip));
-    newNode->next = root->infections;
-    root->infections = newNode;
-
-    for (int i = 0; i < root->num_children; ++i) {
-        if (strcmp(root->children[i]->ip, infector) == 0) {
-            addInfection(root->children[i], infector, infected);
-            break;
-        }
+void insertNode(struct Node* parent, struct Node* son) {
+    if (parent->numSons < MAX_USERS) {
+        parent->sons[parent->numSons++] = son;
     }
 }
 
-void printTree(Tree* root, int depth) {
-    for (int i = 0; i < depth; ++i)
+void printTree(struct Node* root, int level) {
+    int i;
+    for (i = 0; i < level; i++) {
         printf("  ");
-
+    }
     printf("%s\n", root->ip);
 
-    Node* infections = root->infections;
-    while (infections != NULL) {
-        for (int i = 0; i < depth + 1; ++i)
-            printf("  ");
-        printf("%s\n", infections->ip);
-        infections = infections->next;
+    for (i = 0; i < root->numSons; i++) {
+        printTree(root->sons[i], level + 1);
+    }
+}
+
+struct Node* findNode(struct Node* root, const char* ip) {
+    if (strcmp(root->ip, ip) == 0) {
+        return root;
     }
 
-    for (int i = 0; i < root->num_children; ++i)
-        printTree(root->children[i], depth + 1);
+    for (int i = 0; i < root->numSons; i++) {
+        struct Node* foundNode = findNode(root->sons[i], ip);
+        if (foundNode != NULL) {
+            return foundNode;
+        }
+    }
+
+    return NULL;
+}
+
+void freeTree(struct Node* root) {
+    if (root == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < root->numSons; i++) {
+        freeTree(root->sons[i]);
+    }
+
+    free(root);
 }
 
 int main() {
-    // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        perror("Error initializing Winsock");
-        return EXIT_FAILURE;
+        printf("WSAStartup failed.\n");
+        return 1;
     }
 
-    // Initialize the root of the tree (Patient Zero)
-    Tree root;
-    strncpy(root.ip, "1.1.1.1", sizeof(root.ip));
-    root.infections = NULL;
-    root.num_children = 0;
-
-    // Create a socket
     SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == INVALID_SOCKET) {
-        perror("Error creating socket");
+        printf("Error creating socket: %ld\n", WSAGetLastError());
         WSACleanup();
-        return EXIT_FAILURE;
+        return 1;
     }
 
-    // Bind the socket to a specific port
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-    serverAddress.sin_port = htons(8080);
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(1234);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
-        perror("Error binding socket");
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        printf("Bind failed with error: %d\n", WSAGetLastError());
         closesocket(serverSocket);
         WSACleanup();
-        return EXIT_FAILURE;
+        return 1;
     }
 
-    // Listen for incoming connections
-    if (listen(serverSocket, MAX_CONNECTIONS) == SOCKET_ERROR) {
-        perror("Error listening for connections");
+    if (listen(serverSocket, 5) == SOCKET_ERROR) {
+        printf("Listen failed with error: %d\n", WSAGetLastError());
         closesocket(serverSocket);
         WSACleanup();
-        return EXIT_FAILURE;
+        return 1;
     }
 
-    printf("Server is listening on port 8080...\n");
+    printf("Server listening on port 1234...\n");
 
-    // Accept connections and handle data
+    struct Node* root = createNode("1.1.1.1");
+
     while (1) {
         SOCKET clientSocket = accept(serverSocket, NULL, NULL);
         if (clientSocket == INVALID_SOCKET) {
-            perror("Error accepting connection");
-            continue;
+            printf("Accept failed with error: %d\n", WSAGetLastError());
+            closesocket(serverSocket);
+            WSACleanup();
+            freeTree(root);
+            return 1;
         }
 
-        char buffer[256];
-        int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead <= 0) {
-            perror("Error receiving data");
-            closesocket(clientSocket);
-            continue;
+        char senderIP[16];
+        char parentIP[16];
+
+        recv(clientSocket, senderIP, sizeof(senderIP), 0);
+        recv(clientSocket, parentIP, sizeof(parentIP), 0);
+
+        struct Node* senderNode = findNode(root, senderIP);
+        struct Node* parentNode = findNode(root, parentIP);
+
+        if (senderNode == NULL) {
+            senderNode = createNode(senderIP);
+            insertNode(parentNode, senderNode);
         }
 
-        buffer[bytesRead] = '\0';
-        char* ip = strtok(buffer, "-");
-        char* parentIP = strtok(NULL, "-");
-
-        // Add infection to the tree
-        addInfection(&root, parentIP, ip);
-
-        // Print the tree
-        printf("Tree after receiving data:\n");
-        printTree(&root, 0);
+        printf("Family tree after input:\n");
+        printTree(root, 0);
 
         closesocket(clientSocket);
     }
 
-    // Close the server socket and cleanup Winsock
     closesocket(serverSocket);
     WSACleanup();
-
+    freeTree(root);
     return 0;
 }
