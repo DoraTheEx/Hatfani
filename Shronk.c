@@ -3,105 +3,136 @@
 #include <string.h>
 #include <winsock2.h>
 
-#pragma comment(lib, "ws2_32.lib")
-
-#define MAX_NODES 100
-#define PORT 1234
+#define MAX_USERS 100
+#define MAX_IP_LENGTH 16
 
 struct Node {
-    char ip[16]; // Assuming IPv4 addresses
-    char parent_ip[16];
+    char ip[MAX_IP_LENGTH];
+    struct Node* sons[MAX_USERS];
+    int numSons;
 };
 
-struct Node infection_tree[MAX_NODES];
-int node_count = 0;
+struct Node* createNode(const char* ip) {
+    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
+    strncpy(newNode->ip, ip, MAX_IP_LENGTH);
+    newNode->numSons = 0;
+    return newNode;
+}
 
-void printTree(int index) {
-    if (index >= node_count)
-        return;
+void insertNode(struct Node* parent, struct Node* son) {
+    if (parent->numSons < MAX_USERS) {
+        parent->sons[parent->numSons++] = son;
+    }
+}
 
-    printf("%s infected by %s\n", infection_tree[index].ip, infection_tree[index].parent_ip);
+void printTree(struct Node* root, int level) {
+    int i;
+    for (i = 0; i < level; i++) {
+        printf("| ");
+    }
+    printf("-- %s\n", root->ip);
 
-    for (int i = 0; i < node_count; i++) {
-        if (strcmp(infection_tree[i].parent_ip, infection_tree[index].ip) == 0) {
-            printTree(i);
+    for (i = 0; i < root->numSons; i++) {
+        printTree(root->sons[i], level + 1);
+    }
+}
+
+struct Node* findNode(struct Node* root, const char* ip) {
+    if (strcmp(root->ip, ip) == 0) {
+        return root;
+    }
+
+    for (int i = 0; i < root->numSons; i++) {
+        struct Node* foundNode = findNode(root->sons[i], ip);
+        if (foundNode != NULL) {
+            return foundNode;
         }
     }
+
+    return NULL;
+}
+
+void freeTree(struct Node* root) {
+    if (root == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < root->numSons; i++) {
+        freeTree(root->sons[i]);
+    }
+
+    free(root);
 }
 
 int main() {
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        fprintf(stderr, "Failed to initialize Winsock\n");
+        printf("WSAStartup failed.\n");
         return 1;
     }
 
     SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == INVALID_SOCKET) {
-        fprintf(stderr, "Failed to create socket\n");
+        printf("Error creating socket: %ld\n", WSAGetLastError());
         WSACleanup();
         return 1;
     }
 
     struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(PORT);
+    serverAddr.sin_port = htons(1234);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        fprintf(stderr, "Bind failed\n");
+        printf("Bind failed with error: %d\n", WSAGetLastError());
         closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
     if (listen(serverSocket, 5) == SOCKET_ERROR) {
-        fprintf(stderr, "Listen failed\n");
+        printf("Listen failed with error: %d\n", WSAGetLastError());
         closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port 1234...\n");
 
-    SOCKET clientSocket;
-    struct sockaddr_in clientAddr;
-    int addrLen = sizeof(clientAddr);
+    struct Node* root = createNode("1.1.1.1");
 
     while (1) {
-        clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &addrLen);
+        SOCKET clientSocket = accept(serverSocket, NULL, NULL);
         if (clientSocket == INVALID_SOCKET) {
-            fprintf(stderr, "Accept failed\n");
+            printf("Accept failed with error: %d\n", WSAGetLastError());
             closesocket(serverSocket);
             WSACleanup();
+            freeTree(root);
             return 1;
         }
 
-        char sender_ip[16];
-        char parent_ip[16];
+        char senderIP[MAX_IP_LENGTH];
+        char parentIP[MAX_IP_LENGTH];
 
-        recv(clientSocket, sender_ip, sizeof(sender_ip), 0);
-        recv(clientSocket, parent_ip, sizeof(parent_ip), 0);
+        recv(clientSocket, senderIP, sizeof(senderIP), 0);
+        recv(clientSocket, parentIP, sizeof(parentIP), 0);
 
-        if (node_count < MAX_NODES) {
-            strcpy(infection_tree[node_count].ip, sender_ip);
-            strcpy(infection_tree[node_count].parent_ip, parent_ip);
-            node_count++;
+        struct Node* senderNode = findNode(root, senderIP);
+        struct Node* parentNode = findNode(root, parentIP);
 
-            // Print the infection tree
-            printf("\nInfection Tree:\n");
-            printTree(0);
-            printf("\n");
-        } else {
-            printf("Maximum number of nodes reached.\n");
-            break;
+        if (senderNode == NULL) {
+            senderNode = createNode(senderIP);
+            insertNode(parentNode, senderNode);
         }
+
+        printf("Family tree after input:\n");
+        printTree(root, 0);
 
         closesocket(clientSocket);
     }
 
     closesocket(serverSocket);
     WSACleanup();
-
+    freeTree(root);
     return 0;
 }
