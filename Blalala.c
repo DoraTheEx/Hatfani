@@ -1,132 +1,83 @@
+#include <windows.h>
+#include <tlhelp32.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <winsock2.h>
 
-#define MAX_CONNECTIONS 100
-
-typedef struct Node {
-    char ip[16];
-    struct Node* next;
-} Node;
-
-typedef struct Tree {
-    char ip[16];
-    Node* infections;
-    struct Tree* children[MAX_CONNECTIONS];
-    int num_children;
-} Tree;
-
-void addInfection(Tree* root, const char* infector, const char* infected) {
-    Node* newNode = (Node*)malloc(sizeof(Node));
-    strncpy(newNode->ip, infected, sizeof(newNode->ip));
-    newNode->next = root->infections;
-    root->infections = newNode;
-
-    for (int i = 0; i < root->num_children; ++i) {
-        if (strcmp(root->children[i]->ip, infector) == 0) {
-            addInfection(root->children[i], infector, infected);
-            break;
-        }
-    }
-}
-
-void printTree(Tree* root, int depth) {
-    for (int i = 0; i < depth; ++i)
-        printf("  ");
-
-    printf("%s\n", root->ip);
-
-    Node* infections = root->infections;
-    while (infections != NULL) {
-        for (int i = 0; i < depth + 1; ++i)
-            printf("  ");
-        printf("%s\n", infections->ip);
-        infections = infections->next;
-    }
-
-    for (int i = 0; i < root->num_children; ++i)
-        printTree(root->children[i], depth + 1);
-}
+void listProcesses();
+void processDetails(DWORD pid);
+void killProcess(DWORD pid);
 
 int main() {
-    // Initialize Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        perror("Error initializing Winsock");
-        return EXIT_FAILURE;
-    }
+    int choice;
+    DWORD pid;
 
-    // Initialize the root of the tree (Patient Zero)
-    Tree root;
-    strncpy(root.ip, "1.1.1.1", sizeof(root.ip));
-    root.infections = NULL;
-    root.num_children = 0;
+    do {
+        printf("\n1. List running processes\n");
+        printf("2. Show details for a specific process\n");
+        printf("3. Kill a process\n");
+        printf("4. Exit\n");
+        printf("Enter your choice: ");
+        scanf("%d", &choice);
 
-    // Create a socket
-    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == INVALID_SOCKET) {
-        perror("Error creating socket");
-        WSACleanup();
-        return EXIT_FAILURE;
-    }
-
-    // Bind the socket to a specific port
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-    serverAddress.sin_port = htons(8080);
-
-    if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
-        perror("Error binding socket");
-        closesocket(serverSocket);
-        WSACleanup();
-        return EXIT_FAILURE;
-    }
-
-    // Listen for incoming connections
-    if (listen(serverSocket, MAX_CONNECTIONS) == SOCKET_ERROR) {
-        perror("Error listening for connections");
-        closesocket(serverSocket);
-        WSACleanup();
-        return EXIT_FAILURE;
-    }
-
-    printf("Server is listening on port 8080...\n");
-
-    // Accept connections and handle data
-    while (1) {
-        SOCKET clientSocket = accept(serverSocket, NULL, NULL);
-        if (clientSocket == INVALID_SOCKET) {
-            perror("Error accepting connection");
-            continue;
+        switch (choice) {
+            case 1:
+                listProcesses();
+                break;
+            case 2:
+                printf("Enter the PID of the process: ");
+                scanf("%lu", &pid);
+                processDetails(pid);
+                break;
+            case 3:
+                printf("Enter the PID of the process to kill: ");
+                scanf("%lu", &pid);
+                killProcess(pid);
+                break;
+            case 4:
+                printf("Exiting program.\n");
+                break;
+            default:
+                printf("Invalid choice. Please try again.\n");
         }
-
-        char buffer[256];
-        int bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead <= 0) {
-            perror("Error receiving data");
-            closesocket(clientSocket);
-            continue;
-        }
-
-        buffer[bytesRead] = '\0';
-        char* infector = strtok(buffer, ",");
-        char* infected = strtok(NULL, ",");
-
-        // Add infection to the tree
-        addInfection(&root, infector, infected);
-
-        // Print the tree
-        printf("Tree after receiving data:\n");
-        printTree(&root, 0);
-
-        closesocket(clientSocket);
-    }
-
-    // Close the server socket and cleanup Winsock
-    closesocket(serverSocket);
-    WSACleanup();
+    } while (choice != 4);
 
     return 0;
+}
+
+void listProcesses() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    PROCESSENTRY32 processEntry;
+    processEntry.dwSize = sizeof(PROCESSENTRY32);
+
+    if (Process32First(snapshot, &processEntry)) {
+        do {
+            printf("PID: %lu, Process Name: %s\n", processEntry.th32ProcessID, processEntry.szExeFile);
+        } while (Process32Next(snapshot, &processEntry));
+    }
+
+    CloseHandle(snapshot);
+}
+
+void processDetails(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (process != NULL) {
+        // Additional details can be retrieved here based on your needs
+        printf("Details for Process with PID %lu\n", pid);
+        CloseHandle(process);
+    } else {
+        printf("Error opening process. Please check the PID and try again.\n");
+    }
+}
+
+void killProcess(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (process != NULL) {
+        if (TerminateProcess(process, 0)) {
+            printf("Process with PID %lu terminated successfully.\n", pid);
+        } else {
+            printf("Error terminating process. Please check the PID and try again.\n");
+        }
+        CloseHandle(process);
+    } else {
+        printf("Error opening process. Please check the PID and try again.\n");
+    }
 }
