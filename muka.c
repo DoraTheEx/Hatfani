@@ -7,12 +7,36 @@
 #define PORT 5585
 #define MAX_CLIENTS 100
 
-void draw_tree(char* ip, char* parent_ip, int level) {
-    printf("%*s%s\n", level * 4, "", ip);
-    if (strcmp(parent_ip, "1.1.1.1") == 0) {
-        draw_tree("1.1.1.2", "1.1.1.1", level + 1);
-        draw_tree("1.1.1.3", "1.1.1.1", level + 1);
+struct Node {
+    char ip[20];
+    char parent_ip[20];
+    struct Node* next;
+};
+
+struct Node* createNode(char* ip, char* parent_ip) {
+    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
+    strcpy(newNode->ip, ip);
+    strcpy(newNode->parent_ip, parent_ip);
+    newNode->next = NULL;
+    return newNode;
+}
+
+void insertNode(struct Node** head, char* ip, char* parent_ip) {
+    struct Node* newNode = createNode(ip, parent_ip);
+    newNode->next = *head;
+    *head = newNode;
+}
+
+void draw_tree(struct Node* root, char* current_ip, int level) {
+    if (root == NULL)
+        return;
+    
+    if (strcmp(root->parent_ip, current_ip) == 0) {
+        printf("%*s%s\n", level * 4, "", root->ip);
+        draw_tree(root->next, root->ip, level + 1);
     }
+
+    draw_tree(root->next, current_ip, level);
 }
 
 int main() {
@@ -20,8 +44,7 @@ int main() {
     SOCKET s, new_socket;
     struct sockaddr_in server, client;
     int c, client_num = 0;
-    char client_ips[MAX_CLIENTS][20];
-    char parent_ips[MAX_CLIENTS][20];
+    struct Node* root = NULL;
 
     printf("Initializing Winsock...\n");
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -63,17 +86,17 @@ int main() {
         recv(new_socket, ip, sizeof(ip), 0);
         recv(new_socket, parent_ip, sizeof(parent_ip), 0);
 
-        // Store client IPs and parent IPs
-        strcpy(client_ips[client_num], ip);
-        strcpy(parent_ips[client_num], parent_ip);
-        client_num++;
-
-        // Draw tree
-        printf("Tree for client %d:\n", client_num);
-        draw_tree(ip, parent_ip, 0);
+        // Insert into the family tree
+        insertNode(&root, ip, parent_ip);
+        
+        // Print the entire family tree
+        printf("Family tree after client %d:\n", client_num + 1);
+        draw_tree(root, "1.1.1.1", 0);
 
         // Send confirmation to client
         send(new_socket, "Received", 9, 0);
+
+        client_num++;
 
         if (client_num >= MAX_CLIENTS) {
             printf("Maximum number of clients reached. Exiting...\n");
