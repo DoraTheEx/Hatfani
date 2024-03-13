@@ -1,121 +1,143 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <winsock2.h>
+#include <string.h>
 
-#define MAX_INPUT_LEN 20
-#define MAX_NODES 100
+#define PORT 5585
+#define MAX_INPUTS 100
 
 struct Node {
-    char ip[MAX_INPUT_LEN];
-    char parent_ip[MAX_INPUT_LEN];
-    struct Node* children[MAX_NODES];
-    int num_children;
+    char ip[16];
+    struct Node *parent;
+    struct Node *children;
+    struct Node *next; // For siblings
 };
 
-void print_tree(struct Node* root, int level) {
-    if (root == NULL) return;
-    
-    for (int i = 0; i < level; i++) {
-        printf("    "); // Adjust indentation based on level
-    }
-    printf("|--- %s\n", root->ip);
+struct Node* create_node(char *ip, struct Node *parent) {
+    struct Node *node = (struct Node*)malloc(sizeof(struct Node));
+    strcpy(node->ip, ip);
+    node->parent = parent;
+    node->children = NULL;
+    return node;
+}
 
-    for (int i = 0; i < root->num_children; i++) {
-        print_tree(root->children[i], level + 1);
+void add_child(struct Node *parent, struct Node *child) {
+    if (parent == NULL) {
+        return;
     }
+    if (parent->children == NULL) {
+        parent->children = child;
+    } else {
+        struct Node *current = parent->children;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = child;
+    }
+}
+
+void print_tree(struct Node *node, int level) {
+    if (node == NULL) {
+        return;
+    }
+    for (int i = 0; i < level; i++) {
+        printf("  ");
+    }
+    printf("%s\n", node->ip);
+    print_tree(node->children, level + 1);
 }
 
 int main() {
     WSADATA wsaData;
-    SOCKET listenSocket;
-    struct sockaddr_in serverAddr;
-    struct Node nodes[MAX_NODES];
-    int num_nodes = 0;
+    SOCKET serverSocket;
+    SOCKADDR_IN serverAddr, clientAddr;
+    int clientAddrSize = sizeof(clientAddr);
+    char buffer[100];
+    int bytesReceived;
+    struct Node *root = create_node("1.1.1.1", NULL);
+    int inputCount = 0;
 
+    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("WSAStartup failed.\n");
+        printf("WSAStartup failed!\n");
         return 1;
     }
 
-    listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listenSocket == INVALID_SOCKET) {
-        printf("Error creating socket.\n");
+    // Create a socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == INVALID_SOCKET) {
+        printf("Socket creation failed!\n");
         WSACleanup();
         return 1;
     }
 
+    // Bind the socket to the port
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serverAddr.sin_port = htons(5585);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(PORT);
 
-    if (bind(listenSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        printf("Bind failed.\n");
-        closesocket(listenSocket);
+    if (bind(serverSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        printf("Bind failed!\n");
+        closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR) {
-        printf("Listen failed.\n");
-        closesocket(listenSocket);
+    // Listen for incoming connections
+    if (listen(serverSocket, 5) == SOCKET_ERROR) {
+        printf("Listen failed!\n");
+        closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    printf("Waiting for connections...\n");
+    printf("Server listening on port %d...\n", PORT);
 
-    while (1) {
-        SOCKET clientSocket;
-        struct sockaddr_in clientAddr;
-        int clientAddrLen = sizeof(clientAddr);
+    while (inputCount < MAX_INPUTS) {
+        SOCKET clientSocket = accept(serverSocket, (SOCKADDR*)&clientAddr, &clientAddrSize);
 
-        clientSocket = accept(listenSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket == INVALID_SOCKET) {
-            printf("Accept failed.\n");
-            closesocket(listenSocket);
-            WSACleanup();
-            return 1;
+            printf("Accept failed!\n");
+            continue;
         }
 
-        char ip[MAX_INPUT_LEN];
-        char parent_ip[MAX_INPUT_LEN];
-        recv(clientSocket, ip, MAX_INPUT_LEN, 0);
-        recv(clientSocket, parent_ip, MAX_INPUT_LEN, 0);
+        printf("Client connected!\n");
 
-        if (num_nodes < MAX_NODES) {
-            strcpy(nodes[num_nodes].ip, ip);
-            strcpy(nodes[num_nodes].parent_ip, parent_ip);
-            nodes[num_nodes].num_children = 0;
+        // Receive IP and parent IP
+        bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
 
-            for (int i = 0; i < num_nodes; i++) {
-                if (strcmp(nodes[i].ip, parent_ip) == 0) {
-                    nodes[i].children[nodes[i].num_children++] = &nodes[num_nodes];
+        if (bytesReceived > 0) {
+            buffer[bytesReceived] = '\0';
+            char *ip = strtok(buffer, " ");
+            char *parentIp = strtok(NULL, " ");
+
+            struct Node *node = create_node(ip, NULL);
+            struct Node *parentNode = create_node(parentIp, NULL);
+
+            // Find parent node in the tree
+            struct Node *current = root;
+            while (current) {
+                if (strcmp(current->ip, parentIp) == 0) {
+                    parentNode = current;
                     break;
                 }
+                current = current->children;
             }
 
-            num_nodes++;
+            // Add node to the tree
+            add_child(parentNode, node);
+
+            inputCount++;
+            printf("%d inputs received\n", inputCount);
         }
 
         closesocket(clientSocket);
-
-        if (num_nodes >= MAX_NODES) {
-            printf("Maximum number of nodes reached.\n");
-            break;
-        }
     }
 
-    printf("Printing family tree...\n");
-    printf("Root: 1.1.1.1\n");
+    printf("\nPrinting hierarchical tree:\n");
+    print_tree(root, 0);
 
-    for (int i = 0; i < num_nodes; i++) {
-        if (strcmp(nodes[i].parent_ip, "1.1.1.1") == 0) {
-            print_tree(&nodes[i], 1);
-        }
-    }
-
-    closesocket(listenSocket);
+    // Close socket and cleanup
+    closesocket(serverSocket);
     WSACleanup();
     return 0;
 }
