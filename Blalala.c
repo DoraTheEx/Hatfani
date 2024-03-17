@@ -1,83 +1,136 @@
-#include <windows.h>
-#include <tlhelp32.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <winsock2.h>
 
-void listProcesses();
-void processDetails(DWORD pid);
-void killProcess(DWORD pid);
+#pragma comment(lib, "ws2_32.lib")
+
+#define PORT 5585
+#define MAX_CLIENTS 10
+#define MAX_IP_LENGTH 16
+
+typedef struct Node {
+    char ip[MAX_IP_LENGTH];
+    struct Node *parent;
+    struct Node *next;
+} Node;
+
+Node *root = NULL;
+
+Node* createNode(char *ip, Node *parent) {
+    Node *newNode = (Node*)malloc(sizeof(Node));
+    if (newNode == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(newNode->ip, ip);
+    newNode->parent = parent;
+    newNode->next = NULL;
+    return newNode;
+}
+
+void insertNode(char *ip, char *parentIP) {
+    Node *parent = NULL;
+    if (parentIP != NULL) {
+        parent = root;
+        while (parent != NULL && strcmp(parent->ip, parentIP) != 0) {
+            parent = parent->next;
+        }
+        if (parent == NULL) {
+            fprintf(stderr, "Parent IP not found\n");
+            return;
+        }
+    }
+    Node *newNode = createNode(ip, parent);
+    if (root == NULL) {
+        root = newNode;
+    } else {
+        Node *temp = root;
+        while (temp->next != NULL) {
+            temp = temp->next;
+        }
+        temp->next = newNode;
+    }
+}
+
+void printTree(Node *node, int level) {
+    if (node == NULL) return;
+    for (int i = 0; i < level; i++) {
+        printf("|   ");
+    }
+    printf("|---%s\n", node->ip);
+    printTree(node->next, level);
+    printTree(node->parent, level + 1);
+}
 
 int main() {
-    int choice;
-    DWORD pid;
+    WSADATA wsaData;
+    SOCKET serverSocket, clientSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    int addrLen = sizeof(clientAddr);
 
-    do {
-        printf("\n1. List running processes\n");
-        printf("2. Show details for a specific process\n");
-        printf("3. Kill a process\n");
-        printf("4. Exit\n");
-        printf("Enter your choice: ");
-        scanf("%d", &choice);
+    // Initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        fprintf(stderr, "WSAStartup failed\n");
+        return EXIT_FAILURE;
+    }
 
-        switch (choice) {
-            case 1:
-                listProcesses();
-                break;
-            case 2:
-                printf("Enter the PID of the process: ");
-                scanf("%lu", &pid);
-                processDetails(pid);
-                break;
-            case 3:
-                printf("Enter the PID of the process to kill: ");
-                scanf("%lu", &pid);
-                killProcess(pid);
-                break;
-            case 4:
-                printf("Exiting program.\n");
-                break;
-            default:
-                printf("Invalid choice. Please try again.\n");
+    // Create socket
+    if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+        fprintf(stderr, "Socket creation failed\n");
+        WSACleanup();
+        return EXIT_FAILURE;
+    }
+
+    // Prepare the sockaddr_in structure
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(PORT);
+
+    // Bind
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        fprintf(stderr, "Bind failed\n");
+        closesocket(serverSocket);
+        WSACleanup();
+        return EXIT_FAILURE;
+    }
+
+    // Listen
+    if (listen(serverSocket, MAX_CLIENTS) == SOCKET_ERROR) {
+        fprintf(stderr, "Listen failed\n");
+        closesocket(serverSocket);
+        WSACleanup();
+        return EXIT_FAILURE;
+    }
+
+    printf("Server started. Waiting for connections...\n");
+
+    // Accept connections and handle data
+    while (1) {
+        if ((clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &addrLen)) == INVALID_SOCKET) {
+            fprintf(stderr, "Accept failed\n");
+            closesocket(serverSocket);
+            WSACleanup();
+            return EXIT_FAILURE;
         }
-    } while (choice != 4);
 
+        char ip[MAX_IP_LENGTH];
+        char parentIP[MAX_IP_LENGTH];
+        
+        // Receive IP and parent IP from client
+        recv(clientSocket, ip, MAX_IP_LENGTH, 0);
+        recv(clientSocket, parentIP, MAX_IP_LENGTH, 0);
+
+        // Insert into tree
+        insertNode(ip, parentIP);
+
+        // Print tree
+        printf("Hierarchical Tree:\n");
+        printTree(root, 0);
+
+        closesocket(clientSocket);
+    }
+
+    closesocket(serverSocket);
+    WSACleanup();
     return 0;
-}
-
-void listProcesses() {
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    PROCESSENTRY32 processEntry;
-    processEntry.dwSize = sizeof(PROCESSENTRY32);
-
-    if (Process32First(snapshot, &processEntry)) {
-        do {
-            printf("PID: %lu, Process Name: %s\n", processEntry.th32ProcessID, processEntry.szExeFile);
-        } while (Process32Next(snapshot, &processEntry));
-    }
-
-    CloseHandle(snapshot);
-}
-
-void processDetails(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-    if (process != NULL) {
-        // Additional details can be retrieved here based on your needs
-        printf("Details for Process with PID %lu\n", pid);
-        CloseHandle(process);
-    } else {
-        printf("Error opening process. Please check the PID and try again.\n");
-    }
-}
-
-void killProcess(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
-    if (process != NULL) {
-        if (TerminateProcess(process, 0)) {
-            printf("Process with PID %lu terminated successfully.\n", pid);
-        } else {
-            printf("Error terminating process. Please check the PID and try again.\n");
-        }
-        CloseHandle(process);
-    } else {
-        printf("Error opening process. Please check the PID and try again.\n");
-    }
 }
