@@ -1,96 +1,49 @@
+#include <windows.h>
 #include <stdio.h>
-#include <winsock2.h>
+#include <tlhelp32.h>
 
-#define MAX_NODES 100
-#define PORT 12345
+void ListProcessModules(DWORD dwPID)
+{
+    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
+    MODULEENTRY32 me32;
 
-typedef struct Node {
-    char ip[16]; // IP address
-    struct Node* parent; // Pointer to parent node
-} Node;
-
-Node nodes[MAX_NODES];
-int num_nodes = 0;
-
-void addNode(char* ip, Node* parent) {
-    if (num_nodes < MAX_NODES) {
-        strcpy(nodes[num_nodes].ip, ip);
-        nodes[num_nodes].parent = parent;
-        num_nodes++;
-    } else {
-        printf("Maximum number of nodes reached.\n");
+    // Take a snapshot of all modules in the specified process.
+    hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, dwPID);
+    if (hModuleSnap == INVALID_HANDLE_VALUE)
+    {
+        printf("CreateToolhelp32Snapshot (of modules) failed.\n");
+        return;
     }
+
+    // Set the size of the structure before using it.
+    me32.dwSize = sizeof(MODULEENTRY32);
+
+    // Retrieve information about the first module,
+    // and exit if unsuccessful.
+    if (!Module32First(hModuleSnap, &me32))
+    {
+        printf("Module32First failed.\n"); // No modules found.
+        CloseHandle(hModuleSnap);          // Clean the snapshot object.
+        return;
+    }
+
+    // Now walk the module list of the process and
+    // display information about each module.
+    printf("\nDLLs loaded by process %lu:\n", dwPID);
+    do
+    {
+        printf("\t%s\n", me32.szModule);
+    } while (Module32Next(hModuleSnap, &me32));
+
+    CloseHandle(hModuleSnap);
 }
 
-void printFamilyTree() {
-    printf("Family Tree:\n");
-    for (int i = 0; i < num_nodes; i++) {
-        Node* current = &nodes[i];
-        int indent = 0;
-        while (current != NULL) {
-            for (int j = 0; j < indent; j++) {
-                printf("  "); // Two spaces for each level of indentation
-            }
-            printf("%s\n", current->ip);
-            current = current->parent;
-            indent++;
-        }
-        printf("\n");
-    }
-}
+int main()
+{
+    DWORD dwPID;
+    printf("Enter the PID of the process: ");
+    scanf("%lu", &dwPID);
 
-Node* findParent(char* parent_ip) {
-    for (int i = 0; i < num_nodes; i++) {
-        if (strcmp(nodes[i].ip, parent_ip) == 0) {
-            return &nodes[i];
-        }
-    }
-    return NULL;
-}
-
-int main() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("WSAStartup failed.\n");
-        return 1;
-    }
-
-    SOCKET server_socket;
-    struct sockaddr_in server_addr;
-
-    server_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (server_socket == INVALID_SOCKET) {
-        printf("Error creating socket.\n");
-        WSACleanup();
-        return 1;
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(PORT);
-
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        printf("Bind failed.\n");
-        closesocket(server_socket);
-        WSACleanup();
-        return 1;
-    }
-
-    struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
-    char sender_ip[16];
-    char parent_ip[16];
-
-    while (1) {
-        recvfrom(server_socket, sender_ip, sizeof(sender_ip), 0, (struct sockaddr *)&client_addr, &client_addr_len);
-        recvfrom(server_socket, parent_ip, sizeof(parent_ip), 0, (struct sockaddr *)&client_addr, &client_addr_len);
-
-        Node* parent = findParent(parent_ip);
-        addNode(sender_ip, parent);
-        printFamilyTree();
-    }
-
-    closesocket(server_socket);
-    WSACleanup();
+    ListProcessModules(dwPID);
     return 0;
 }
