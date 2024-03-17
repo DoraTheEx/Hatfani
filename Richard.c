@@ -1,137 +1,130 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <winsock2.h>
 
-#define MAX_USERS 100
+#define MAX_INPUTS 100
+#define MAX_IP_LENGTH 16
 
-struct Node {
-    char ip[16];
-    struct Node* sons[MAX_USERS];
-    int numSons;
-};
+// Structure to represent a node in the tree
+typedef struct TreeNode {
+    char ip[MAX_IP_LENGTH];
+    char parent_ip[MAX_IP_LENGTH];
+    struct TreeNode* children[MAX_INPUTS];
+    int num_children;
+} TreeNode;
 
-struct Node* createNode(const char* ip) {
-    struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
-    strcpy(newNode->ip, ip);
-    newNode->numSons = 0;
-    return newNode;
-}
-
-void insertNode(struct Node* parent, struct Node* son) {
-    if (parent->numSons < MAX_USERS) {
-        parent->sons[parent->numSons++] = son;
-    }
-}
-
-void printTree(struct Node* root, int level) {
-    int i;
-    for (i = 0; i < level; i++) {
-        printf("  ");
+// Function to print tree recursively
+void printTree(TreeNode* root, int depth) {
+    for (int i = 0; i < depth; i++) {
+        printf("  "); // Indent based on depth
     }
     printf("%s\n", root->ip);
-
-    for (i = 0; i < root->numSons; i++) {
-        printTree(root->sons[i], level + 1);
+    for (int i = 0; i < root->num_children; i++) {
+        printTree(root->children[i], depth + 1);
     }
-}
-
-struct Node* findNode(struct Node* root, const char* ip) {
-    if (strcmp(root->ip, ip) == 0) {
-        return root;
-    }
-
-    for (int i = 0; i < root->numSons; i++) {
-        struct Node* foundNode = findNode(root->sons[i], ip);
-        if (foundNode != NULL) {
-            return foundNode;
-        }
-    }
-
-    return NULL;
-}
-
-void freeTree(struct Node* root) {
-    if (root == NULL) {
-        return;
-    }
-
-    for (int i = 0; i < root->numSons; i++) {
-        freeTree(root->sons[i]);
-    }
-
-    free(root);
 }
 
 int main() {
     WSADATA wsaData;
+    SOCKET serverSocket;
+    struct sockaddr_in serverAddr;
+
+    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         printf("WSAStartup failed.\n");
         return 1;
     }
 
-    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    // Create server socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == INVALID_SOCKET) {
-        printf("Error creating socket: %ld\n", WSAGetLastError());
-        WSACleanup();
+        printf("Socket creation failed.\n");
         return 1;
     }
 
-    struct sockaddr_in serverAddr;
+    // Setup server address
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(1234);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(5585);
 
-    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        printf("Bind failed with error: %d\n", WSAGetLastError());
+    // Bind server socket
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        printf("Socket bind failed.\n");
         closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    if (listen(serverSocket, 5) == SOCKET_ERROR) {
-        printf("Listen failed with error: %d\n", WSAGetLastError());
+    // Listen for incoming connections
+    if (listen(serverSocket, 10) == SOCKET_ERROR) {
+        printf("Listen failed.\n");
         closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    printf("Server listening on port 1234...\n");
+    // Accept incoming connections
+    SOCKET clientSocket;
+    struct sockaddr_in clientAddr;
+    int clientAddrLen = sizeof(clientAddr);
 
-    struct Node* root = createNode("1.1.1.1");
+    clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
+    if (clientSocket == INVALID_SOCKET) {
+        printf("Accept failed.\n");
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // Handle incoming data and build the tree
+    TreeNode* nodes[MAX_INPUTS];
+    int num_nodes = 0;
 
     while (1) {
-        SOCKET clientSocket = accept(serverSocket, NULL, NULL);
-        if (clientSocket == INVALID_SOCKET) {
-            printf("Accept failed with error: %d\n", WSAGetLastError());
-            closesocket(serverSocket);
-            WSACleanup();
-            freeTree(root);
-            return 1;
+        char ip[MAX_IP_LENGTH];
+        char parent_ip[MAX_IP_LENGTH];
+
+        // Receive input from client
+        recv(clientSocket, ip, sizeof(ip), 0);
+        recv(clientSocket, parent_ip, sizeof(parent_ip), 0);
+
+        // Add node to tree
+        TreeNode* node = (TreeNode*)malloc(sizeof(TreeNode));
+        strcpy(node->ip, ip);
+        strcpy(node->parent_ip, parent_ip);
+        node->num_children = 0;
+        nodes[num_nodes++] = node;
+
+        // Check for end of input
+        if (strcmp(ip, "END") == 0) {
+            break;
         }
-
-        char senderIP[16];
-        char parentIP[16];
-
-        recv(clientSocket, senderIP, sizeof(senderIP), 0);
-        recv(clientSocket, parentIP, sizeof(parentIP), 0);
-
-        struct Node* senderNode = findNode(root, senderIP);
-        struct Node* parentNode = findNode(root, parentIP);
-
-        if (senderNode == NULL) {
-            senderNode = createNode(senderIP);
-            insertNode(parentNode, senderNode);
-        }
-
-        printf("Family tree after input:\n");
-        printTree(root, 0);
-
-        closesocket(clientSocket);
     }
 
+    // Build tree structure
+    for (int i = 0; i < num_nodes; i++) {
+        for (int j = 0; j < num_nodes; j++) {
+            if (strcmp(nodes[i]->parent_ip, nodes[j]->ip) == 0) {
+                nodes[j]->children[nodes[j]->num_children++] = nodes[i];
+                break;
+            }
+        }
+    }
+
+    // Find root node
+    TreeNode* root = NULL;
+    for (int i = 0; i < num_nodes; i++) {
+        if (strcmp(nodes[i]->parent_ip, "") == 0) {
+            root = nodes[i];
+            break;
+        }
+    }
+
+    // Print tree
+    printTree(root, 0);
+
+    // Clean up
+    closesocket(clientSocket);
     closesocket(serverSocket);
     WSACleanup();
-    freeTree(root);
     return 0;
 }
