@@ -1,110 +1,81 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <string.h>
 #include <winsock2.h>
 
-#define MAX_INPUT_SIZE 100
+#define MAX_NODES 100
+#define PORT 12345
 
-typedef struct Node {
+struct Node {
     char ip[16];
-    struct Node* parent;
-} Node;
+    char parent_ip[16];
+};
 
-Node* nodes[MAX_INPUT_SIZE];
-int numNodes = 0;
+struct Node nodes[MAX_NODES];
+int num_nodes = 0;
 
-void addNode(char* ip, char* parentIp) {
-    Node* newNode = (Node*)malloc(sizeof(Node));
-    strcpy(newNode->ip, ip);
-    newNode->parent = NULL;
-
-    // Find parent node
-    for (int i = 0; i < numNodes; ++i) {
-        if (strcmp(nodes[i]->ip, parentIp) == 0) {
-            newNode->parent = nodes[i];
-            break;
-        }
+void addNode(char *ip, char *parent_ip) {
+    if (num_nodes < MAX_NODES) {
+        strcpy(nodes[num_nodes].ip, ip);
+        strcpy(nodes[num_nodes].parent_ip, parent_ip);
+        num_nodes++;
     }
-
-    nodes[numNodes++] = newNode;
 }
 
-void printFamilyTree(Node* node, int level) {
-    for (int i = 0; i < level; ++i) {
-        printf("  ");
-    }
-    printf("%s\n", node->ip);
-    
-    for (int i = 0; i < numNodes; ++i) {
-        if (nodes[i]->parent == node) {
-            printFamilyTree(nodes[i], level + 1);
+void printFamilyTree() {
+    printf("Family Tree:\n");
+    for (int i = 0; i < num_nodes; i++) {
+        printf("%s\n", nodes[i].ip);
+        for (int j = 0; j < num_nodes; j++) {
+            if (strcmp(nodes[j].parent_ip, nodes[i].ip) == 0) {
+                printf("  %s\n", nodes[j].ip);
+            }
         }
     }
 }
 
 int main() {
     WSADATA wsaData;
-    SOCKET sock;
-    struct sockaddr_in server;
-    struct sockaddr_in client;
-    int c;
-    char senderIp[16];
-    char parentIp[16];
-
-    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("WSAStartup failed.\n");
+        fprintf(stderr, "WSAStartup failed.\n");
         return 1;
     }
 
-    // Create socket
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        printf("Socket creation failed.\n");
+    int sockfd;
+    struct sockaddr_in server_addr, client_addr;
+    int client_len = sizeof(client_addr);
+    char sender_ip[16], parent_ip[16];
+
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        fprintf(stderr, "Socket creation failed.\n");
         return 1;
     }
 
-    // Prepare the sockaddr_in structure
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(12345);
+    memset(&server_addr, 0, sizeof(server_addr));
+    memset(&client_addr, 0, sizeof(client_addr));
 
-    // Bind
-    if (bind(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-        printf("Bind failed.\n");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(PORT);
+
+    if (bind(sockfd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        fprintf(stderr, "Binding failed.\n");
         return 1;
     }
 
-    // Listen
-    listen(sock, 3);
+    while (1) {
+        printf("Waiting for sender IP...\n");
+        recvfrom(sockfd, sender_ip, sizeof(sender_ip), 0, (struct sockaddr *)&client_addr, &client_len);
+        printf("Sender IP received: %s\n", sender_ip);
 
-    // Accept and incoming connection
-    printf("Waiting for incoming connections...\n");
-    c = sizeof(struct sockaddr_in);
-    while ((c = accept(sock, (struct sockaddr*)&client, &c)) != INVALID_SOCKET) {
-        // Receive sender IP
-        recv(c, senderIp, 16, 0);
-        // Receive parent IP
-        recv(c, parentIp, 16, 0);
+        printf("Waiting for parent IP...\n");
+        recvfrom(sockfd, parent_ip, sizeof(parent_ip), 0, (struct sockaddr *)&client_addr, &client_len);
+        printf("Parent IP received: %s\n", parent_ip);
 
-        addNode(senderIp, parentIp);
-
-        printf("Added node: %s (Parent: %s)\n", senderIp, parentIp);
+        addNode(sender_ip, parent_ip);
+        printFamilyTree();
     }
 
-    if (c == INVALID_SOCKET) {
-        printf("Accept failed.\n");
-        return 1;
-    }
-
-    // Print family tree
-    printf("Family Tree:\n");
-    for (int i = 0; i < numNodes; ++i) {
-        if (nodes[i]->parent == NULL) {
-            printFamilyTree(nodes[i], 0);
-        }
-    }
-
-    // Cleanup
-    closesocket(sock);
+    closesocket(sockfd);
     WSACleanup();
 
     return 0;
