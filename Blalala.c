@@ -104,6 +104,9 @@ int main() {
 
     printf("Server started. Waiting for connections...\n");
 
+    // Initialize root node
+    root = createNode("1.1.1.1", NULL);
+
     // Accept connections and handle data
     while (1) {
         if ((clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &addrLen)) == INVALID_SOCKET) {
