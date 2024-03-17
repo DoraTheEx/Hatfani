@@ -1,41 +1,35 @@
 #include <windows.h>
 #include <stdio.h>
-#include <tlhelp32.h>
 
 void ListProcessModules(DWORD dwPID)
 {
-    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
-    MODULEENTRY32 me32;
+    HANDLE hProcess;
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
 
-    // Take a snapshot of all modules in the specified process.
-    hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, dwPID);
-    if (hModuleSnap == INVALID_HANDLE_VALUE)
-    {
-        printf("CreateToolhelp32Snapshot (of modules) failed.\n");
+    // Get a handle to the process.
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwPID);
+    if (NULL == hProcess)
         return;
+
+    // Get a list of all the modules in this process.
+    if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
+    {
+        for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+        {
+            TCHAR szModName[MAX_PATH];
+
+            // Get the full path to the module's file.
+            if (GetModuleFileNameEx(hProcess, hMods[i], szModName, sizeof(szModName) / sizeof(TCHAR)))
+            {
+                // Print the module name.
+                _tprintf(TEXT("%s\n"), szModName);
+            }
+        }
     }
 
-    // Set the size of the structure before using it.
-    me32.dwSize = sizeof(MODULEENTRY32);
-
-    // Retrieve information about the first module,
-    // and exit if unsuccessful.
-    if (!Module32First(hModuleSnap, &me32))
-    {
-        printf("Module32First failed.\n"); // No modules found.
-        CloseHandle(hModuleSnap);          // Clean the snapshot object.
-        return;
-    }
-
-    // Now walk the module list of the process and
-    // display information about each module.
-    printf("\nDLLs loaded by process %lu:\n", dwPID);
-    do
-    {
-        printf("\t%s\n", me32.szModule);
-    } while (Module32Next(hModuleSnap, &me32));
-
-    CloseHandle(hModuleSnap);
+    // Release the handle to the process.
+    CloseHandle(hProcess);
 }
 
 int main()
