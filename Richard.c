@@ -1,43 +1,44 @@
 #include <windows.h>
+#include <tlhelp32.h>
 #include <stdio.h>
 
-void ListProcessModules(DWORD dwPID)
-{
-    HANDLE hProcess;
-    HMODULE hMods[1024];
-    DWORD cbNeeded;
+void PrintProcessModules(DWORD processID) {
+    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
+    MODULEENTRY32 me32;
 
-    // Get a handle to the process.
-    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwPID);
-    if (NULL == hProcess)
+    // Take a snapshot of all modules in the specified process.
+    hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, processID);
+    if (hModuleSnap == INVALID_HANDLE_VALUE) {
+        printf("CreateToolhelp32Snapshot (of modules) failed\n");
         return;
-
-    // Get a list of all the modules in this process.
-    if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
-    {
-        for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
-        {
-            TCHAR szModName[MAX_PATH];
-
-            // Get the full path to the module's file.
-            if (GetModuleFileNameEx(hProcess, hMods[i], szModName, sizeof(szModName) / sizeof(TCHAR)))
-            {
-                // Print the module name.
-                _tprintf(TEXT("%s\n"), szModName);
-            }
-        }
     }
 
-    // Release the handle to the process.
-    CloseHandle(hProcess);
+    // Set the size of the structure before using it.
+    me32.dwSize = sizeof(MODULEENTRY32);
+
+    // Retrieve information about the first module,
+    // and exit if unsuccessful
+    if (!Module32First(hModuleSnap, &me32)) {
+        printf("Module32First failed\n");
+        CloseHandle(hModuleSnap);     // Must clean up the snapshot object!
+        return;
+    }
+
+    // Now walk the module list of the process
+    do {
+        printf("Module name: %s\n", me32.szModule);
+    } while (Module32Next(hModuleSnap, &me32));
+
+    // Do not forget to clean up the snapshot object.
+    CloseHandle(hModuleSnap);
 }
 
-int main()
-{
-    DWORD dwPID;
-    printf("Enter the PID of the process: ");
-    scanf("%lu", &dwPID);
+int main() {
+    DWORD processID;
+    printf("Enter the process ID: ");
+    scanf("%lu", &processID);
 
-    ListProcessModules(dwPID);
+    PrintProcessModules(processID);
+
     return 0;
 }
