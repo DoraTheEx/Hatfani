@@ -1,88 +1,94 @@
 #include <stdio.h>
-#include <winsock2.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MAX_NODES 100
-#define PORT 12345
 
+// Node structure to represent each IP address
 typedef struct Node {
-    char ip[16]; // IP address
-    int parent_index; // Index of the parent node in the array
+    char ip[16]; // Assuming IPv4 addresses
+    struct Node* parent;
+    struct Node* children[MAX_NODES];
+    int numChildren;
+    int printed;
 } Node;
 
-Node nodes[MAX_NODES];
-int num_nodes = 0;
+Node* nodes[MAX_NODES]; // Array to hold all nodes
+int numNodes = 0;
 
-void addNode(char* ip, int parent_index) {
-    if (num_nodes < MAX_NODES) {
-        strcpy(nodes[num_nodes].ip, ip);
-        nodes[num_nodes].parent_index = parent_index;
-        num_nodes++;
-    } else {
-        printf("Maximum number of nodes reached.\n");
+// Function to find a node by IP address
+Node* findNode(const char* ip) {
+    for (int i = 0; i < numNodes; i++) {
+        if (strcmp(nodes[i]->ip, ip) == 0) {
+            return nodes[i];
+        }
     }
+    return NULL;
 }
 
-void printFamilyTree() {
-    printf("Family Tree:\n");
-    for (int i = 0; i < num_nodes; i++) {
-        int indent = 0;
-        int current_index = i;
-        while (current_index != -1) {
-            for (int j = 0; j < indent; j++) {
-                printf("  "); // Two spaces for each level of indentation
-            }
-            printf("%s\n", nodes[current_index].ip);
-            current_index = nodes[current_index].parent_index;
-            indent++;
-        }
-        printf("\n");
+// Function to create a new node
+Node* createNode(const char* ip) {
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    strcpy(newNode->ip, ip);
+    newNode->parent = NULL;
+    newNode->numChildren = 0;
+    newNode->printed = 0;
+    return newNode;
+}
+
+// Function to add a new relationship (child to parent)
+void addRelationship(const char* childIp, const char* parentIp) {
+    Node* child = findNode(childIp);
+    Node* parent = findNode(parentIp);
+
+    if (child == NULL) {
+        child = createNode(childIp);
+        nodes[numNodes++] = child;
+    }
+
+    if (parent == NULL) {
+        parent = createNode(parentIp);
+        nodes[numNodes++] = parent;
+    }
+
+    child->parent = parent;
+    parent->children[parent->numChildren++] = child;
+}
+
+// Function to print the hierarchical tree
+void printTree(Node* node, int depth) {
+    if (node == NULL || node->printed) return;
+
+    for (int i = 0; i < depth; i++) {
+        printf("\t");
+    }
+    printf("|-- %s\n", node->ip);
+    node->printed = 1;
+
+    for (int i = 0; i < node->numChildren; i++) {
+        printTree(node->children[i], depth + 1);
     }
 }
 
 int main() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("WSAStartup failed.\n");
-        return 1;
+    // Adding root node
+    Node* root = createNode("1.1.1.1");
+    nodes[numNodes++] = root;
+
+    // Example input (you can replace this with your input mechanism)
+    addRelationship("192.168.1.1", "192.168.1.0");
+    addRelationship("192.168.1.2", "192.168.1.1");
+    addRelationship("192.168.1.3", "192.168.1.1");
+    addRelationship("192.168.2.1", "192.168.2.0");
+    addRelationship("192.168.2.2", "192.168.2.1");
+
+    // Print the hierarchical tree
+    printTree(root, 0);
+
+    // Free allocated memory
+    for (int i = 0; i < numNodes; i++) {
+        free(nodes[i]);
     }
 
-    SOCKET server_socket;
-    struct sockaddr_in server_addr;
-
-    server_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (server_socket == INVALID_SOCKET) {
-        printf("Error creating socket.\n");
-        WSACleanup();
-        return 1;
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(PORT);
-
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        printf("Bind failed.\n");
-        closesocket(server_socket);
-        WSACleanup();
-        return 1;
-    }
-
-    struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
-    char sender_ip[16];
-    char parent_ip[16];
-
-    while (1) {
-        recvfrom(server_socket, sender_ip, sizeof(sender_ip), 0, (struct sockaddr *)&client_addr, &client_addr_len);
-        recvfrom(server_socket, parent_ip, sizeof(parent_ip), 0, (struct sockaddr *)&client_addr, &client_addr_len);
-
-        // Assume you have some function to determine the parent index based on the parent IP
-        int parent_index = 0; // Placeholder for parent index
-        addNode(sender_ip, parent_index);
-        printFamilyTree();
-    }
-
-    closesocket(server_socket);
-    WSACleanup();
     return 0;
 }
