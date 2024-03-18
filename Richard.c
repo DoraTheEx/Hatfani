@@ -1,44 +1,85 @@
-#include <windows.h>
-#include <tlhelp32.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-void PrintProcessModules(DWORD processID) {
-    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
-    MODULEENTRY32 me32;
+#define MAX_NODES 100
 
-    // Take a snapshot of all modules in the specified process.
-    hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, processID);
-    if (hModuleSnap == INVALID_HANDLE_VALUE) {
-        printf("CreateToolhelp32Snapshot (of modules) failed\n");
-        return;
+// Node structure to represent each IP address
+typedef struct Node {
+    char ip[16]; // Assuming IPv4 addresses
+    struct Node* parent;
+} Node;
+
+Node* nodes[MAX_NODES]; // Array to hold all nodes
+int numNodes = 0;
+
+// Function to find a node by IP address
+Node* findNode(const char* ip) {
+    for (int i = 0; i < numNodes; i++) {
+        if (strcmp(nodes[i]->ip, ip) == 0) {
+            return nodes[i];
+        }
+    }
+    return NULL;
+}
+
+// Function to create a new node
+Node* createNode(const char* ip) {
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    strcpy(newNode->ip, ip);
+    newNode->parent = NULL;
+    return newNode;
+}
+
+// Function to add a new relationship (child to parent)
+void addRelationship(const char* childIp, const char* parentIp) {
+    Node* child = findNode(childIp);
+    Node* parent = findNode(parentIp);
+
+    if (child == NULL) {
+        child = createNode(childIp);
+        nodes[numNodes++] = child;
     }
 
-    // Set the size of the structure before using it.
-    me32.dwSize = sizeof(MODULEENTRY32);
-
-    // Retrieve information about the first module,
-    // and exit if unsuccessful
-    if (!Module32First(hModuleSnap, &me32)) {
-        printf("Module32First failed\n");
-        CloseHandle(hModuleSnap);     // Must clean up the snapshot object!
-        return;
+    if (parent == NULL) {
+        parent = createNode(parentIp);
+        nodes[numNodes++] = parent;
     }
 
-    // Now walk the module list of the process
-    do {
-        printf("Module name: %s\n", me32.szModule);
-    } while (Module32Next(hModuleSnap, &me32));
+    child->parent = parent;
+}
 
-    // Do not forget to clean up the snapshot object.
-    CloseHandle(hModuleSnap);
+// Function to print the hierarchical tree
+void printTree(Node* node, int depth) {
+    if (node == NULL) return;
+
+    for (int i = 0; i < depth; i++) {
+        printf("\t");
+    }
+    printf("|-- %s\n", node->ip);
+
+    printTree(node->parent, depth + 1);
 }
 
 int main() {
-    DWORD processID;
-    printf("Enter the process ID: ");
-    scanf("%lu", &processID);
+    // Example input (you can replace this with your input mechanism)
+    addRelationship("192.168.1.1", "192.168.1.0");
+    addRelationship("192.168.1.2", "192.168.1.1");
+    addRelationship("192.168.1.3", "192.168.1.1");
+    addRelationship("192.168.2.1", "192.168.2.0");
+    addRelationship("192.168.2.2", "192.168.2.1");
 
-    PrintProcessModules(processID);
+    // Print the hierarchical tree
+    for (int i = 0; i < numNodes; i++) {
+        if (nodes[i]->parent == NULL) {
+            printTree(nodes[i], 0);
+        }
+    }
+
+    // Free allocated memory
+    for (int i = 0; i < numNodes; i++) {
+        free(nodes[i]);
+    }
 
     return 0;
 }
