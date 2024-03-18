@@ -8,6 +8,8 @@
 typedef struct Node {
     char ip[16]; // Assuming IPv4 addresses
     struct Node* parent;
+    struct Node* children[MAX_NODES];
+    int numChildren;
 } Node;
 
 Node* nodes[MAX_NODES]; // Array to hold all nodes
@@ -28,6 +30,7 @@ Node* createNode(const char* ip) {
     Node* newNode = (Node*)malloc(sizeof(Node));
     strcpy(newNode->ip, ip);
     newNode->parent = NULL;
+    newNode->numChildren = 0;
     return newNode;
 }
 
@@ -47,6 +50,7 @@ void addRelationship(const char* childIp, const char* parentIp) {
     }
 
     child->parent = parent;
+    parent->children[parent->numChildren++] = child;
 }
 
 // Function to print the hierarchical tree
@@ -58,7 +62,9 @@ void printTree(Node* node, int depth) {
     }
     printf("|-- %s\n", node->ip);
 
-    printTree(node->parent, depth + 1);
+    for (int i = 0; i < node->numChildren; i++) {
+        printTree(node->children[i], depth + 1);
+    }
 }
 
 int main() {
