@@ -139,6 +139,11 @@ int main() {
         // Print the hierarchical tree
         printTree(nodes[0], 0);
         
+        // Reset print flags
+        for (int i = 0; i < numNodes; i++) {
+            nodes[i]->printed = 0;
+        }
+        
         // Send acknowledgment to the client
         const char* ack = "Data received successfully\n";
         send(new_socket, ack, strlen(ack), 0);
