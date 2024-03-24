@@ -1,11 +1,56 @@
-ChatGPT 3.5
 
-User
-Write me a paragraph about each of the following protocols. About how they work, their mechanics and functionality. The protocols are: ipsec, telnet, imap, pop3
+SNMP:
+פרוטוקול מבוסס UDP המשמש לניהול רשתות. מאפשר ללקוחות לשאול נתונים ממכשירים (SNMP agents) ולשלוט בהם. משמש לניטור וניהול התקנים ברשת, איסוף נתונים סטטיסטיים, קבלת התראות על תקלות ותיקון תקלות.
 
-ChatGPT
-IPsec (Internet Protocol Security) is a network protocol suite that ensures secure communication over IP networks by encrypting and authenticating IP packets. It operates at the network layer of the OSI model and provides mechanisms for data integrity, confidentiality, and authentication. IPsec works by encapsulating the original IP packet within a new IP packet, adding headers and trailers to provide security services. It utilizes cryptographic algorithms like AES (Advanced Encryption Standard) for encryption and HMAC (Hash-based Message Authentication Code) for authentication. IPsec can be implemented in two modes: Transport mode, where only the payload is encrypted, and Tunnel mode, where the entire original IP packet is encrypted and encapsulated within a new IP packet.
+עבודה:
 
-Telnet (Telecommunication Network) is a protocol used for remote terminal access to network devices. It allows users to establish a connection with a remote host over a network and interact with it as if they were physically present at the terminal. Telnet operates on the Application Layer of the OSI model and uses a client-server architecture. The client initiates a connection request to the server, which then prompts the user for authentication credentials. Once authenticated, the user can execute commands on the remote system. Telnet transmits data in plain text, which poses security risks, so it's generally recommended to use more secure protocols like SSH (Secure Shell) instead.
+SNMP משתמש במודל לקוח-שרת.
+הלקוח שולח בקשות לשרת (SNMP agent) לקבלת נתונים או שליטה בהתקן.
+השרת מחזיר תגובות עם הנתונים המבוקשים או אישור ביצוע פעולה.
+SNMP משתמש ב-PDU (Protocol Data Unit) להעברת נתונים.
+PDU מורכב מכותרת ונתונים.
+הכותרת מכילה מידע על סוג ה-PDU, מזהה בקשה/תגובה, קוד שגיאה ועוד.
+הנתונים מכילים את המידע הספציפי לבקשה/תגובה.
+SNMP תומך במגוון רחב של פעולות, כגון:
+GET: בקשת נתונים מהשרת.
+SET: שינוי נתונים בשרת.
+TRAP: שליחת הודעה על אירוע חריג מהשרת ללקוח.
+טכני:
 
-IMAP (Internet Message Access Protocol) is a protocol used for accessing and managing email messages stored on a mail server. Unlike POP3 (Post Office Protocol version 3), which downloads emails to a local device and typically deletes them from the server, IMAP allows users to view and manipulate emails without downloading them. IMAP operates on the Application Layer of the OSI model and provides features such as folder management, message flagging, and server-side searching. It uses port 143 for non-encrypted connections and port 993 for encrypted connections (IMAPS). IMAP synchronizes the email client with the server, ensuring that changes made on one device are reflected on all connected devices, providing a more flexible and collaborative email experience.
+SNMP פועל על גבי UDP (port 161).
+SNMPv1 ו-SNMPv2 אינם מאובטחים.
+SNMPv3 מאובטח באמצעות SHA ו-AES.
+NTP:
+פרוטוקול מבוסס UDP המשמש לסנכרון שעונים בין מחשבים ברשת. שומר על זמן אחיד בין כל המחשבים ברשת, דבר חשוב עבור יישומים רבים כגון שירותי אינטרנט, אבטחה ועוד.
+
+עבודה:
+
+NTP משתמש במודל לקוח-שרת.
+הלקוח שולח בקשות לשרת (NTP server) לקבלת זמן מדויק.
+השרת מחזיר תגובות עם זמן מדויק.
+NTP משתמש ב-timestamps להעברת זמן.
+timestamp הוא מספר המציין את מספר הסקנדים שחלפו מאז 01/01/1970.
+NTP משתמש באלגוריתמים מיוחדים להתמודדות עם עיכובים ושינויים ברשת.
+טכני:
+
+NTP פועל על גבי UDP (port 123).
+NTP משתמש ב-Stratum levels להגדרת היררכיה של שרתים.
+Stratum 1: שרתים המקבלים זמן ממקור חיצוני (כגון שעון אטומי).
+Stratum 2: שרתים מסונכרנים עם שרתים Stratum 1.
+וכך הלאה.
+HTTPS:
+פרוטוקול שכבה עליונה (application layer) הפועל מעל HTTP. HTTPS משתמש ב-TLS/SSL להצפנת נתונים. TLS/SSL משתמש במפתחות סימטריים וא-סימטריים להצפנה ופענוח נתונים. מפתח סימטרי משמש להצפנת נתונים במהלך התקשורת. מפתח א-סימטרי משמש לאימות זהות הצדדים. HTTPS משתמש ב-certificates להעברת מפתחות ציבוריים. certificates חתומים על ידי גורם מוסמך (CA).
+
+טכני:
+
+HTTPS פועל על גבי TCP (port 443).
+HTTPS תומך במגוון רחב של צופן (ciphers) ואלגוריתמי Hash.
+TLSv1.3 הוא הגרסה האחרונה של TLS.
+RPC:
+פרוטוקול המאפשר הפעלת פונקציות על מחשב מרוחק כאילו הן פועלות על המחשב המקומי. יוצר ממשק אחיד להפעלת פונקציות מרוחקות, דבר המאפשר פיתוח יישומים מבוזרים.
+
+עבודה:
+
+RPC משתמש במודל לקוח-שרת.
+הלקוח קורא לפונקציה מרוחקת על השרת.
+השרת מבצע את הפונקציה ומחזיר את התוצאה ללקוח.
