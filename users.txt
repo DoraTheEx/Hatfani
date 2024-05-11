@@ -1,0 +1,3 @@
+John Doe,johndoe,5f4dcc3b5aa765d61d8327deb882cf99,False,1,[]
+Alice Smith,alicesmith,5f4dcc3b5aa765d61d8327deb882cf99,True,9,[]
+Cosmo J,cosmo,32a8bd4d676f4fef0920c7da8db2bad7,True,0,[]
